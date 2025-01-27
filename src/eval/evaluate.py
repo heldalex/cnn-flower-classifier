@@ -43,18 +43,12 @@ def eval_fn(model, loader, device):
     model.eval()
 
     t = tqdm(loader)
-    confusion_matrix = torch.zeros(len(loader.dataset.classes), len(loader.dataset.classes))
     with torch.no_grad():  # no gradient needed
         for images, labels in t:
             images = images.to(device)
             labels = labels.to(device)
 
             outputs = model(images)
-            for t, p in zip(labels.view(-1), outputs.argmax(dim=1).view(-1)):
-                confusion_matrix[(t-1).long(), (p-1).long()] += 1
-            confusion_matrix = confusion_matrix / confusion_matrix.sum(1)
-            #save confusion matrix in a file
-            torch.save(confusion_matrix, 'confusion_matrix.pt')
             acc = accuracy(outputs, labels)
             score.update(acc.item(), images.size(0))
 
