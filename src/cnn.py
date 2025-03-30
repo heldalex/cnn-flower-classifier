@@ -1,32 +1,75 @@
-""" File with CNN models. Add your custom CNN model here. """
-
 import torch.nn as nn
-import torch.nn.functional as F
 
 
-class SampleModel(nn.Module):
-    """
-    A sample PyTorch CNN model
-    """
+class  CnnModel(nn.Module):
     def __init__(self, input_shape=(3, 64, 64), num_classes=17):
-        super(SampleModel, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=input_shape[0], out_channels=10, kernel_size=(3, 3), padding=(1, 1))
-        self.conv2 = nn.Conv2d(in_channels=10, out_channels=20, kernel_size=(3, 3), padding=(1, 1))
-        self.pool = nn.MaxPool2d(3, stride=2)
-        # The input features for the linear layer depends on the size of the input to the convolutional layer
-        # So if you resize your image in data augmentations, you'll have to tweak this too.
-        self.fc1 = nn.Linear(in_features=4500, out_features=32)
-        self.fc2 = nn.Linear(in_features=32, out_features=num_classes)
+        super(CnnModel, self).__init__()
+
+        # Depthwise separable CNNs
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, 64, 3, padding=1),  # Reduced from 128
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, 3, padding=1, groups=64),
+            nn.Conv2d(64, 128, 1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Dropout2d(0.1)
+        )
+
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(128, 128, 3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.Conv2d(128, 128, 3, padding=1, groups=128),
+            nn.Conv2d(128, 256, 1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.MaxPool2d(2),
+            nn.Dropout2d(0.2)
+        )
+
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(256, 256, 3, padding=1, groups=256),
+            nn.Conv2d(256, 512, 1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.Dropout2d(0.3),
+            nn.MaxPool2d(2)
+        )
+
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(512, 512, 3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.Dropout2d(0.3)
+        )
+
+        # Attention (dynamic channel reweighting instead of spatial feature extraction)
+        self.attention = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(512, 128, 1),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Conv2d(128, 512, 1),
+            nn.Sigmoid()
+        )
+
+        # Classifier
+        self.fc = nn.Sequential(
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Linear(256, num_classes)
+        )
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.pool(x)
         x = self.conv2(x)
-        x = self.pool(x)
-
-        x = x.view(x.size(0), -1)
-        x = self.fc1(x)
-        x = F.relu(x)
-        x = self.fc2(x)
-
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = x * self.attention(x)
+        x = x.mean([2, 3])
+        x = self.fc(x)
         return x

@@ -1,43 +1,58 @@
 from tqdm import tqdm
 import time
+import torch
 
 from src.eval.evaluate import AverageMeter, accuracy
 
 
 def train_fn(model, optimizer, criterion, loader, device):
     """
-  Training method
-  :param model: model to train
-  :param optimizer: optimization algorithm
-  :criterion: loss function
-  :param loader: data loader for either training or testing set
-  :param device: torch device
-  :return: (accuracy, loss) on the data
-  """
-    time_begin = time.time()
+    Training method
+    :param model: model to train
+    :param optimizer: optimization algorithm
+    :criterion: loss function
+    :param loader: data loader for either training or testing set
+    :param device: torch device
+    :return: (accuracy, loss) on the data
+    """
+    model.train()
     score = AverageMeter()
     losses = AverageMeter()
-    model.train()
-    time_train = 0
+    batch_time = AverageMeter()
 
-    t = tqdm(loader)
-    for images, labels in t:
-        images = images.to(device)
-        labels = labels.to(device)
+    end = time.time()
 
-        optimizer.zero_grad()
-        logits = model(images)
-        loss = criterion(logits, labels)
-        loss.backward()
-        optimizer.step()
+    with tqdm(loader, desc="Training", unit="batch") as t:
+        for images, labels in t:
+            # Data to device
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
 
-        acc = accuracy(logits, labels)
-        n = images.size(0)
-        losses.update(loss.item(), n)
-        score.update(acc.item(), n)
+            # Forward pass
+            optimizer.zero_grad(set_to_none=True)
+            with torch.cuda.amp.autocast():  # AMP support to speed up training
+                logits = model(images)
+                loss = criterion(logits, labels)
 
-        t.set_description('(=> Training) Loss: {:.4f}'.format(losses.avg))
+            # Backward pass
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)  # Gradient clipping
+            optimizer.step()
 
-    time_train += time.time() - time_begin
-    print('training time: ' + str(time_train))
+            # Metrics
+            acc = accuracy(logits, labels)
+            batch_size = images.size(0)
+            losses.update(loss.item(), batch_size)
+            score.update(acc.item(), batch_size)
+            batch_time.update(time.time() - end)
+            end = time.time()
+
+            # Progress bar update
+            t.set_postfix({
+                'Loss': f'{losses.avg:.4f}',
+                'Acc': f'{score.avg:.2f}%',
+                'Time': f'{batch_time.avg:.3f}s/b'
+            })
+
+    print(f'\n* Train - Loss: {losses.avg:.4f} | Acc: {score.avg:.2f}%')
     return score.avg, losses.avg

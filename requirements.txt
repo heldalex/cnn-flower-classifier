@@ -3,3 +3,7 @@ matplotlib>=3.3
 numpy>=1.19
 torchsummary>=1.5
 tqdm>=4.45.0
+# torch~=2.4.1
+pandas~=2.2.3
+torch~=2.6.0+cu126
+torchvision~=0.21.0+cu126
