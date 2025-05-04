@@ -165,11 +165,6 @@ def main(data_dir,
 
 
 if __name__ == '__main__':
-    """
-    This is just an example of a training pipeline.
-
-    Feel free to add or remove more arguments, change default values or hardcode parameters to use.
-    """
     loss_dict = {
         'cross_entropy': lambda: torch.nn.CrossEntropyLoss,  # Base option
         'cross_entropy_ls': lambda: torch.nn.CrossEntropyLoss(label_smoothing=0.1)  # Matches main
